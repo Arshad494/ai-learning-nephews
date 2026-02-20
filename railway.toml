@@ -1,8 +1,8 @@
 [build]
-buildCommand = "chmod +x build.sh && bash build.sh"
+buildCommand = "echo 'Using Dockerfile'"
 
 [deploy]
-startCommand = "cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT"
+startCommand = "python seed_data.py && uvicorn main:app --host 0.0.0.0 --port $PORT"
 healthcheckPath = "/"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
