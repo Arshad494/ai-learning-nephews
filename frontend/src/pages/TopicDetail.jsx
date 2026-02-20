@@ -102,11 +102,40 @@ export default function TopicDetail() {
           {/* Content Body */}
           <div className="prose prose-invert max-w-none">
             {getContent() ? (
-              getContent().split('\n').filter(p => p.trim()).map((paragraph, i) => (
-                <p key={i} className="text-gray-200 leading-relaxed mb-4 text-base">
-                  {paragraph}
-                </p>
-              ))
+              getContent().split('\n').filter(p => p.trim()).map((line, i) => {
+                if (line.startsWith('## ')) {
+                  return (
+                    <div key={i} className="mt-8 mb-3 first:mt-0">
+                      <h3 className={`text-xl font-black ${theme.accent} flex items-center gap-2`}>
+                        <span className={`w-1 h-6 rounded-full bg-gradient-to-b ${theme.gradient} inline-block`} />
+                        {line.replace(/^## /, '')}
+                      </h3>
+                      <div className={`h-px mt-2 bg-gradient-to-r ${theme.gradient} opacity-20`} />
+                    </div>
+                  );
+                }
+                if (line.startsWith('### ')) {
+                  return <h4 key={i} className="text-base font-bold text-gray-200 mt-5 mb-2">{line.replace(/^### /, '')}</h4>;
+                }
+                if (line.startsWith('- ') || line.startsWith('• ')) {
+                  return (
+                    <div key={i} className="flex gap-2 mb-2 ml-2">
+                      <span className={`${theme.accent} mt-0.5 shrink-0`}>▸</span>
+                      <p className="text-gray-200 leading-relaxed text-sm">{line.slice(2)}</p>
+                    </div>
+                  );
+                }
+                if (/^\d+\./.test(line)) {
+                  const [num, ...rest] = line.split('. ');
+                  return (
+                    <div key={i} className="flex gap-3 mb-2 ml-2">
+                      <span className={`text-sm font-bold ${theme.accent} shrink-0 mt-0.5`}>{num}.</span>
+                      <p className="text-gray-200 leading-relaxed text-sm">{rest.join('. ')}</p>
+                    </div>
+                  );
+                }
+                return <p key={i} className="text-gray-200 leading-relaxed mb-4 text-base">{line}</p>;
+              })
             ) : (
               <p className="text-gray-400 italic">Content loading... Ask the AI Tutor below!</p>
             )}
@@ -138,7 +167,7 @@ export default function TopicDetail() {
           className={`${theme.card} rounded-xl p-4 text-center hover:scale-105 transition-transform`}>
           <span className="text-3xl block">🧪</span>
           <span className="text-sm font-semibold text-white mt-2 block">Take Quiz</span>
-          <span className="text-xs text-gray-400">10 questions · +XP</span>
+          <span className="text-xs text-gray-400">15 questions · +XP</span>
         </Link>
         <Link to="/flashcards"
           className={`${theme.card} rounded-xl p-4 text-center hover:scale-105 transition-transform`}>

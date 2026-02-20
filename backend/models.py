@@ -163,3 +163,28 @@ class Concept(Base):
     fun_fact = Column(Text, default="")
     difficulty = Column(String, default="beginner")
     read_time = Column(Integer, default=5)
+
+
+class CachedQuizQuestion(Base):
+    __tablename__ = "cached_quiz_questions"
+    id = Column(Integer, primary_key=True, index=True)
+    topic_id = Column(Integer, ForeignKey("topics.id"))
+    question = Column(Text, nullable=False)
+    q_type = Column(String, default="mcq")  # mcq or true_false
+    options = Column(Text, default="[]")    # JSON array of option strings
+    correct = Column(Text, nullable=False)
+    explanation = Column(Text, default="")
+    difficulty = Column(String, default="medium")  # easy, medium, hard
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class CachedFlashcard(Base):
+    __tablename__ = "cached_flashcards"
+    id = Column(Integer, primary_key=True, index=True)
+    topic_name = Column(String, nullable=False)
+    path_id = Column(String, nullable=False)
+    front = Column(Text, nullable=False)
+    back = Column(Text, nullable=False)
+    example = Column(Text, default="")
+    mnemonic = Column(Text, default="")
+    created_at = Column(DateTime, default=datetime.utcnow)

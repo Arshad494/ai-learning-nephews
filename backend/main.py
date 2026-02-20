@@ -493,44 +493,129 @@ def get_topic(topic_id: int, db: Session = Depends(get_db)):
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
 
-    # Lazy-generate content if missing and Gemini is available
-    if GEMINI_AVAILABLE and not topic.content_normal:
+    # Lazy-generate content if missing — use Groq (primary) or Gemini (fallback)
+    ai_available = GROQ_AVAILABLE or GEMINI_AVAILABLE
+    if ai_available and not topic.content_normal:
         try:
-            path_audience = {
-                "gaming": "a 13-year-old who loves gaming (Minecraft, PUBG, FIFA, GTA, Roblox). Use game examples.",
-                "business": "a 17-year-old interested in AI for business. Use Indian startup examples (Zomato, Flipkart, etc). No coding.",
-                "developer": "a 20-year-old CS student. Be technical, include code concepts, mention frameworks and tools.",
-                "ai_enthusiast": "an adult AI enthusiast who wants comprehensive understanding. Be thorough, include history, ethics, and future implications.",
+            path_profiles = {
+                "gaming": {
+                    "audience": "a smart 13-year-old who is obsessed with gaming — Minecraft, PUBG, FIFA, GTA, Roblox, Valorant",
+                    "simple_style": "Use super simple language. Relate EVERYTHING to popular games. No jargon at all. Pretend you're explaining it to a friend who's never studied.",
+                    "normal_style": "Use gaming examples throughout — specific game mechanics, characters, and scenarios. Be exciting and energetic. Name real games.",
+                    "tech_style": "Explain the underlying algorithms and data structures. Include game engine examples. Connect to real game dev concepts.",
+                    "sections_normal": ["Introduction", "What Is It Really?", "How It Works In Games", "Real Games Using This Right Now", "The Secret Sauce (Key Mechanisms)", "Why This Changes Gaming", "Try This Challenge"],
+                    "sections_tech": ["Technical Foundation", "Core Algorithms", "Data Structures Used", "Real Game Engine Implementation", "Performance Considerations", "State of the Art", "Research Frontiers"],
+                },
+                "business": {
+                    "audience": "a sharp 17-year-old interested in entrepreneurship and AI for business",
+                    "simple_style": "Plain English, business scenarios, no tech jargon. Use examples from companies a teen would know.",
+                    "normal_style": "Use Indian startup examples (Zomato, Flipkart, Paytm, Swiggy, CRED, Meesho) and global giants. Focus on ROI and practical value.",
+                    "tech_style": "Explain the technology behind the business application. Include market data, use cases, implementation considerations.",
+                    "sections_normal": ["Introduction", "The Business Problem It Solves", "How Companies Use It Today", "Indian Companies Leading the Way", "The Money Behind It", "How to Build This into a Business", "Your Action Plan"],
+                    "sections_tech": ["Technical Overview", "How It Works", "Implementation Strategy", "Data Requirements", "Key Metrics & KPIs", "Case Studies", "Building Your Own"],
+                },
+                "developer": {
+                    "audience": "a 20-year-old CS student who codes and wants to understand AI deeply",
+                    "simple_style": "Clear explanation with pseudocode and simple analogies. Assume basic CS knowledge.",
+                    "normal_style": "Include algorithm names, complexity analysis, framework mentions (PyTorch, TensorFlow, scikit-learn). Be precise and technical.",
+                    "tech_style": "Deep dive: math notation, code snippets, paper references, benchmarks, architectural decisions, tradeoffs.",
+                    "sections_normal": ["Concept Overview", "Core Algorithm", "Mathematical Intuition", "Code Implementation Pattern", "Real-World Systems", "Performance & Complexity", "What to Build Next"],
+                    "sections_tech": ["Formal Definition", "Mathematical Foundation", "Algorithm Deep-Dive", "Implementation Architecture", "Optimization Techniques", "Production Considerations", "Research Papers to Read"],
+                },
+                "ai_enthusiast": {
+                    "audience": "an adult AI enthusiast who wants complete, nuanced understanding",
+                    "simple_style": "Accessible but not dumbed-down. Use clear analogies for complex concepts.",
+                    "normal_style": "Comprehensive coverage including history, how it works, applications, limitations, and future. Be intellectually engaging.",
+                    "tech_style": "Full technical depth: theory, math, implementation details, current SOTA, open research questions, ethical considerations.",
+                    "sections_normal": ["Historical Context", "What It Is & Why It Matters", "How It Actually Works", "Current Applications", "Limitations & Challenges", "Ethical Dimensions", "The Future"],
+                    "sections_tech": ["Technical Foundation", "Mathematical Framework", "Architecture & Implementation", "Current State of the Art", "Benchmarks & Comparisons", "Open Problems", "Research Directions"],
+                },
             }
-            audience = path_audience.get(topic.path_id, "a learner")
+            profile = path_profiles.get(topic.path_id, path_profiles["ai_enthusiast"])
 
-            prompt = f"""Write comprehensive educational content about "{topic.title}" for {audience}.
+            def build_content_prompt(level: str) -> str:
+                if level == "simple":
+                    style = profile["simple_style"]
+                    sections = ["Let's Break It Down Simply", "The Fun Connection", "Real Examples You Know", "Why This Is Cool", "Quick Summary Points"]
+                    para_count = "8-10"
+                elif level == "normal":
+                    style = profile["normal_style"]
+                    sections = profile["sections_normal"]
+                    para_count = "10-13"
+                else:  # technical
+                    style = profile["tech_style"]
+                    sections = profile["sections_tech"]
+                    para_count = "12-15"
 
-Return ONLY valid JSON with these exact keys:
+                sections_str = "\n".join(f"## {s}" for s in sections)
+                return f"""Write a comprehensive {level}-level lesson about "{topic.title}" for {profile['audience']}.
+
+Style guide: {style}
+
+Use EXACTLY these section headers (with ## prefix):
+{sections_str}
+
+Requirements:
+- Total {para_count} substantial paragraphs across all sections
+- Each paragraph must be 3-5 sentences minimum
+- Be specific — use real names, real examples, real numbers
+- Last section (if "Summary" or "Points"): use bullet points with - prefix
+- Write engaging prose, NOT bullet points for the main content
+- NO generic statements. Everything must be specific and vivid.
+
+Return ONLY the raw content text. Start directly with the first ## header. No preamble."""
+
+            simple_content = normal_content = tech_content = ""
+            fun_fact = real_world = ""
+
+            if GROQ_AVAILABLE:
+                for level, attr in [("simple", "simple_content"), ("normal", "normal_content"), ("technical", "tech_content")]:
+                    try:
+                        completion = groq_client.chat.completions.create(
+                            model="llama-3.3-70b-versatile",
+                            messages=[{"role": "user", "content": build_content_prompt(level)}],
+                            max_tokens=3000,
+                            temperature=0.75,
+                        )
+                        locals()[attr] = completion.choices[0].message.content.strip()
+                    except Exception:
+                        pass
+            elif GEMINI_AVAILABLE:
+                # Gemini generates all levels in one call for efficiency
+                prompt = f"""Write comprehensive educational content about "{topic.title}" for {profile['audience']}.
+{profile['normal_style']}
+
+Return ONLY valid JSON with these keys:
 {{
-  "simple": "2-3 paragraph beginner-friendly explanation with vivid analogies and examples. No jargon.",
-  "normal": "4-5 paragraph standard explanation covering the concept thoroughly with real-world examples and practical applications.",
-  "technical": "5-7 paragraph technical deep-dive covering how it works under the hood, key algorithms/mechanisms, industry applications, and advanced considerations.",
-  "key_points": ["5-7 key takeaway bullet points"],
-  "real_world": "A specific, detailed real-world case study or example of this concept in action.",
-  "fun_fact": "One surprising or counterintuitive fact about this topic."
+  "simple": "8-10 paragraph beginner explanation with ## section headers (sections: Let's Break It Down, The Fun Connection, Real Examples, Why This Is Cool, Quick Summary). Use bullet points with - for the summary section.",
+  "normal": "11-13 paragraph full explanation with ## section headers ({', '.join(profile['sections_normal'])}). Last section use bullets.",
+  "technical": "13-15 paragraph technical deep-dive with ## section headers ({', '.join(profile['sections_tech'])}). Include specific technical details.",
+  "fun_fact": "One surprising counterintuitive fact (2 sentences).",
+  "real_world": "A specific detailed real-world case study (3-4 sentences)."
 }}"""
+                try:
+                    response = gemini_model.generate_content(prompt)
+                    text = response.text.strip()
+                    if text.startswith("```"):
+                        text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+                    data = json.loads(text)
+                    simple_content = data.get("simple", "")
+                    normal_content = data.get("normal", "")
+                    tech_content = data.get("technical", "")
+                    fun_fact = data.get("fun_fact", "")
+                    real_world = data.get("real_world", "")
+                except Exception:
+                    pass
 
-            response = gemini_model.generate_content(prompt)
-            text = response.text.strip()
-            if text.startswith("```"):
-                text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-            data = json.loads(text)
-            topic.content_simple = data.get("simple", "")
-            topic.content_normal = data.get("normal", "")
-            topic.content_technical = data.get("technical", "")
-            if not topic.fun_fact:
-                topic.fun_fact = data.get("fun_fact", "")
-            if not topic.real_world_example:
-                topic.real_world_example = data.get("real_world", "")
-            # Store key points in fun_fact if not set
-            key_points = data.get("key_points", [])
-            db.commit()
+            if normal_content:
+                topic.content_simple = simple_content or normal_content
+                topic.content_normal = normal_content
+                topic.content_technical = tech_content or normal_content
+                if not topic.fun_fact and fun_fact:
+                    topic.fun_fact = fun_fact
+                if not topic.real_world_example and real_world:
+                    topic.real_world_example = real_world
+                db.commit()
         except Exception:
             pass
 
@@ -570,6 +655,22 @@ def complete_topic(req: MarkTopicRequest, db: Session = Depends(get_db)):
 
 # ────────────────────────── Quiz Routes ──────────────────────────
 
+def _build_quiz_prompt(topic_title: str, path_context: str, count: int, easy: int, medium: int, hard: int) -> str:
+    return f"""Generate exactly {count} quiz questions about "{topic_title}" for an AI learning platform.
+{path_context}
+
+Distribution: {easy} easy (basic recall/definitions), {medium} medium (application/understanding), {hard} hard (analysis/synthesis/edge-cases).
+Include True/False questions (about 20% of total) and MCQ for the rest (4 distinct options each).
+
+IMPORTANT: Make questions specific, interesting, and NOT generic. Reference real scenarios.
+
+Return ONLY a valid JSON array, zero markdown, zero explanation. Each element:
+{{"question":"engaging question text","type":"mcq","options":["A","B","C","D"],"correct":"exact text matching one option","explanation":"2-3 sentence explanation with context and why wrong options are wrong","difficulty":"easy"}}
+
+True/False example:
+{{"question":"True or False: ..?","type":"true_false","options":["True","False"],"correct":"True","explanation":"...","difficulty":"easy"}}"""
+
+
 @app.get("/api/quiz/generate/{topic_id}")
 def generate_quiz(topic_id: int, student_id: int = Query(...), db: Session = Depends(get_db)):
     topic = db.query(Topic).filter(Topic.id == topic_id).first()
@@ -577,69 +678,112 @@ def generate_quiz(topic_id: int, student_id: int = Query(...), db: Session = Dep
     if not topic or not student:
         raise HTTPException(status_code=404, detail="Topic or student not found")
 
-    if GEMINI_AVAILABLE:
+    # ── Check cache: if 40+ questions exist, sample 15 and return ──
+    cached = db.query(CachedQuizQuestion).filter(CachedQuizQuestion.topic_id == topic_id).all()
+    if len(cached) >= 40:
+        selected = random.sample(cached, min(15, len(cached)))
+        order = {"easy": 0, "medium": 1, "hard": 2}
+        selected.sort(key=lambda x: order.get(x.difficulty, 1))
+        return {
+            "questions": [{
+                "question": q.question, "type": q.q_type,
+                "options": json.loads(q.options), "correct": q.correct,
+                "explanation": q.explanation, "difficulty": q.difficulty,
+            } for q in selected],
+            "topic": topic.title,
+            "pool_size": len(cached),
+        }
+
+    path_context = {
+        "gaming": "Student is 13 and loves Minecraft, PUBG, FIFA, GTA, Roblox. Use specific game mechanics, characters, and scenarios throughout. Every question should relate to gaming.",
+        "business": "Student is 17 and interested in business. Use real Indian companies (Zomato, Flipkart, Paytm, CRED) and global examples (Amazon, Uber). Focus on practical business applications, no coding.",
+        "developer": "Student is 20 and studying CS. Use technical examples with algorithms, data structures, code concepts. Include nuanced technical distinctions.",
+        "ai_enthusiast": "Student is an adult AI enthusiast wanting deep understanding. Include historical context, ethical dimensions, comparisons between approaches, and future implications.",
+    }
+    ctx = path_context.get(student.path_id, "Make questions clear and educational with specific examples.")
+
+    all_new_questions = []
+
+    # ── Primary: Groq (generate 50 questions in 2 batches) ──
+    if GROQ_AVAILABLE:
         try:
-            path_context = {
-                "gaming": "Use gaming examples and language. The student is 13 and loves games like Minecraft, PUBG, FIFA, GTA, Roblox. Make questions fun and game-themed.",
-                "business": "Use business examples like Zomato, Amazon, Flipkart, Uber. The student is 17 and interested in business. No coding jargon. Focus on real business applications.",
-                "developer": "Use technical examples with code concepts, algorithms, and system design. The student is 20 and studying CS. Include advanced technical nuances.",
-                "ai_enthusiast": "Use clear, comprehensive examples. The student is an adult AI enthusiast who wants deep understanding. Include historical context, ethical dimensions, and future implications. Mix factual recall with conceptual understanding.",
-            }
-            prompt = f"""Generate exactly 10 quiz questions about "{topic.title}" for an AI learning platform.
-{path_context.get(student.path_id, "Make questions clear and educational.")}
+            batches = [
+                (25, 8, 11, 6),   # count, easy, medium, hard
+                (25, 5, 10, 10),
+            ]
+            for count, easy, medium, hard in batches:
+                prompt = _build_quiz_prompt(topic.title, ctx, count, easy, medium, hard)
+                completion = groq_client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=4500,
+                    temperature=0.7,
+                )
+                text = completion.choices[0].message.content.strip()
+                if "```" in text:
+                    parts = text.split("```")
+                    text = parts[1] if len(parts) > 1 else text
+                    if text.startswith("json"):
+                        text = text[4:]
+                    text = text.rsplit("```", 1)[0]
+                text = text.strip()
+                batch = json.loads(text)
+                all_new_questions.extend(batch)
+        except Exception:
+            all_new_questions = []
 
-Create a progressive set: 3 easy (basic recall), 4 medium (application and understanding), 3 hard (analysis and synthesis).
-Include a mix of MCQ and true/false questions.
-
-Return ONLY valid JSON array, no markdown, no explanation. Each question object must have:
-- "question": the question text (make it engaging, not dry)
-- "type": "mcq" or "true_false"
-- "options": array of 4 options for mcq, or ["True", "False"] for true_false
-- "correct": the correct answer (must match one of the options exactly)
-- "explanation": thorough explanation of WHY the answer is correct (2-3 sentences with context)
-- "difficulty": "easy", "medium", or "hard"
-
-Example format:
-[{{"question":"What is...","type":"mcq","options":["A","B","C","D"],"correct":"B","explanation":"B is correct because...","difficulty":"easy"}}]"""
-
+    # ── Fallback: Gemini (generate 20 questions) ──
+    if not all_new_questions and GEMINI_AVAILABLE:
+        try:
+            prompt = _build_quiz_prompt(topic.title, ctx, 20, 6, 8, 6)
             response = gemini_model.generate_content(prompt)
             text = response.text.strip()
             if text.startswith("```"):
                 text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-            questions = json.loads(text)
-            return {"questions": questions[:10], "topic": topic.title}
-        except Exception as e:
+            all_new_questions = json.loads(text)
+        except Exception:
             pass
 
-    # Fallback static questions
-    fallback = [
-        {"question": f"What is the main concept behind {topic.title}?",
-         "type": "mcq",
+    # ── Cache all generated questions ──
+    if all_new_questions:
+        for q in all_new_questions:
+            db.add(CachedQuizQuestion(
+                topic_id=topic_id,
+                question=q.get("question", ""),
+                q_type=q.get("type", "mcq"),
+                options=json.dumps(q.get("options", [])),
+                correct=q.get("correct", ""),
+                explanation=q.get("explanation", ""),
+                difficulty=q.get("difficulty", "medium"),
+            ))
+        db.commit()
+        # Return 15 sorted by difficulty
+        selected = random.sample(all_new_questions, min(15, len(all_new_questions)))
+        order = {"easy": 0, "medium": 1, "hard": 2}
+        selected.sort(key=lambda x: order.get(x.get("difficulty", "medium"), 1))
+        return {"questions": selected, "topic": topic.title, "pool_size": len(all_new_questions)}
+
+    # ── Static fallback ──
+    return {"questions": [
+        {"question": f"What is the main concept behind {topic.title}?", "type": "mcq",
          "options": ["Machine Learning", "Artificial Intelligence", "Data Processing", "Neural Networks"],
-         "correct": "Artificial Intelligence",
-         "explanation": f"This topic is fundamentally about AI concepts!"},
-        {"question": f"True or False: {topic.title} is an important area in AI?",
-         "type": "true_false",
-         "options": ["True", "False"],
-         "correct": "True",
-         "explanation": f"Yes, {topic.title} is a key area in AI!"},
-        {"question": f"Which best describes a key aspect of {topic.title}?",
-         "type": "mcq",
+         "correct": "Artificial Intelligence", "difficulty": "easy",
+         "explanation": f"{topic.title} is fundamentally about AI — the science of making machines smart."},
+        {"question": f"True or False: {topic.title} is an important area in modern AI?", "type": "true_false",
+         "options": ["True", "False"], "correct": "True", "difficulty": "easy",
+         "explanation": f"Absolutely! {topic.title} is a core pillar of modern AI development."},
+        {"question": f"Which best describes a key aspect of {topic.title}?", "type": "mcq",
          "options": ["Pattern Recognition", "Data Storage", "Web Design", "Hardware Manufacturing"],
-         "correct": "Pattern Recognition",
-         "explanation": "AI is fundamentally about recognizing patterns!"},
-        {"question": f"What makes {topic.title} revolutionary?",
-         "type": "mcq",
+         "correct": "Pattern Recognition", "difficulty": "medium",
+         "explanation": "AI fundamentally works by recognizing patterns in data to make intelligent decisions."},
+        {"question": f"What makes {topic.title} powerful?", "type": "mcq",
          "options": ["It automates intelligent tasks", "It replaces all humans", "It only works offline", "It requires no data"],
-         "correct": "It automates intelligent tasks",
-         "explanation": "AI's power is in automating tasks that require intelligence!"},
-        {"question": "True or False: AI systems can learn and improve from experience?",
-         "type": "true_false",
-         "options": ["True", "False"],
-         "correct": "True",
-         "explanation": "Yes! Learning from experience is a core feature of AI."},
-    ]
-    return {"questions": fallback, "topic": topic.title}
+         "correct": "It automates intelligent tasks", "difficulty": "medium",
+         "explanation": "The core power of AI is automating tasks that normally require human intelligence."},
+        {"question": "True or False: AI systems improve through learning from experience?", "type": "true_false",
+         "options": ["True", "False"], "correct": "True", "difficulty": "easy",
+         "explanation": "Yes! Machine learning — a branch of AI — specifically enables systems to improve from experience."},
+    ], "topic": topic.title}
 
 @app.post("/api/quiz/submit")
 def submit_quiz(req: QuizSubmit, db: Session = Depends(get_db)):
@@ -687,8 +831,10 @@ def submit_quiz(req: QuizSubmit, db: Session = Depends(get_db)):
                     db.add(StudentBadge(student_id=student.id, badge_id=badge.id))
                     db.commit()
 
+    pool_size = db.query(CachedQuizQuestion).filter(CachedQuizQuestion.topic_id == req.topic_id).count()
     return {"score": score, "correct": correct, "total": total,
-            "xp_earned": xp, "total_xp": total_xp, "perfect": score == 100}
+            "xp_earned": xp, "total_xp": total_xp, "perfect": score == 100,
+            "pool_size": pool_size if pool_size > 0 else None}
 
 @app.get("/api/quiz/history/{student_id}")
 def quiz_history(student_id: int, db: Session = Depends(get_db)):
@@ -789,45 +935,104 @@ def generate_flashcards(req: FlashcardGenRequest, db: Session = Depends(get_db))
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
-    if GEMINI_AVAILABLE:
+    # ── Check cache ──
+    cached = db.query(CachedFlashcard).filter(
+        CachedFlashcard.topic_name == req.topic,
+        CachedFlashcard.path_id == student.path_id
+    ).all()
+    if len(cached) >= 20:
+        cards = []
+        for c in cached:
+            back_text = c.back
+            if c.example:
+                back_text += f"\n\n🎮 Example: {c.example}"
+            if c.mnemonic:
+                back_text += f"\n\n🧠 Remember: {c.mnemonic}"
+            cards.append({"front": c.front, "back": back_text})
+        return {"cards": cards, "topic": req.topic, "cached": True}
+
+    path_context = {
+        "gaming": "For a 13-year-old gamer. Every example must reference a real game (Minecraft, PUBG, FIFA, GTA, Roblox, Valorant, etc.). Use gamer language. Make it fun.",
+        "business": "For a 17-year-old business student. Use real companies (Zomato, Flipkart, Amazon, Uber, etc.). Focus on practical business value.",
+        "developer": "For a 20-year-old CS student. Be technical. Include algorithmic concepts, code patterns, and framework names.",
+        "ai_enthusiast": "For an adult AI enthusiast. Be comprehensive and accurate. Include nuance, history, and real-world implications.",
+    }
+    ctx = path_context.get(student.path_id, "Use clear explanations with concrete examples.")
+
+    new_cards = []
+
+    # ── Primary: Groq (25 flashcards) ──
+    if GROQ_AVAILABLE:
         try:
-            path_context = {
-                "gaming": "Use fun gaming language and examples for a 13-year-old gamer.",
-                "business": "Use business examples and professional language for a 17-year-old business student.",
-                "developer": "Use technical language with code examples for a 20-year-old CS student."
-            }
-            prompt = f"""Generate exactly 10 flashcards about "{req.topic}" for studying.
-{path_context.get(student.path_id, "")}
+            prompt = f"""Generate exactly 25 comprehensive flashcards about "{req.topic}".
+{ctx}
 
-Return ONLY valid JSON array. Each flashcard must have:
-- "front": the question or term (keep it short)
-- "back": the answer or definition (2-3 sentences max)
+Each flashcard should be memorable and test real understanding — NOT just rote memorization.
+Cover the topic from multiple angles: definitions, mechanisms, applications, comparisons, edge cases, history.
 
-Example: [{{"front":"What is X?","back":"X is..."}}]"""
+Return ONLY valid JSON array. Each object:
+{{"front":"concise question or term (max 15 words)","back":"rich explanation (3-4 sentences that really teach)","example":"specific real-world or gaming example (2 sentences)","mnemonic":"memory trick, acronym, or vivid analogy (1-2 sentences, can be empty string if not helpful)"}}"""
+            completion = groq_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=5000,
+                temperature=0.7,
+            )
+            text = completion.choices[0].message.content.strip()
+            if "```" in text:
+                parts = text.split("```")
+                text = parts[1] if len(parts) > 1 else text
+                if text.startswith("json"):
+                    text = text[4:]
+                text = text.rsplit("```", 1)[0]
+            new_cards = json.loads(text.strip())
+        except Exception:
+            new_cards = []
 
+    # ── Fallback: Gemini (15 flashcards) ──
+    if not new_cards and GEMINI_AVAILABLE:
+        try:
+            prompt = f"""Generate exactly 15 flashcards about "{req.topic}". {ctx}
+Return ONLY valid JSON array. Each object:
+{{"front":"concise question or term","back":"3-4 sentence explanation","example":"real-world example","mnemonic":"memory trick or empty string"}}"""
             response = gemini_model.generate_content(prompt)
             text = response.text.strip()
             if text.startswith("```"):
                 text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-            cards = json.loads(text)
-            return {"cards": cards[:10], "topic": req.topic}
+            new_cards = json.loads(text)
         except Exception:
             pass
 
-    # Fallback
-    cards = [
-        {"front": f"What is {req.topic}?", "back": f"{req.topic} is an important concept in AI that helps solve real-world problems."},
-        {"front": f"Why is {req.topic} important?", "back": f"It enables machines to perform intelligent tasks and make better decisions."},
-        {"front": "What is AI?", "back": "Artificial Intelligence is the simulation of human intelligence by computer systems."},
-        {"front": "What is Machine Learning?", "back": "A subset of AI where systems learn from data without explicit programming."},
-        {"front": "What is a Neural Network?", "back": "A computing system inspired by biological neural networks in the brain."},
-        {"front": "What is Deep Learning?", "back": "Neural networks with many layers that can learn complex patterns."},
-        {"front": "What is NLP?", "back": "Natural Language Processing — AI that understands human language."},
-        {"front": "What is Computer Vision?", "back": "AI that can interpret and understand visual information from images/video."},
-        {"front": "What is Reinforcement Learning?", "back": "AI that learns by trial and error, receiving rewards for good actions."},
-        {"front": "What are LLMs?", "back": "Large Language Models — massive neural networks trained on text data."},
-    ]
-    return {"cards": cards, "topic": req.topic}
+    # ── Cache and return ──
+    if new_cards:
+        for c in new_cards:
+            db.add(CachedFlashcard(
+                topic_name=req.topic,
+                path_id=student.path_id,
+                front=c.get("front", ""),
+                back=c.get("back", ""),
+                example=c.get("example", ""),
+                mnemonic=c.get("mnemonic", ""),
+            ))
+        db.commit()
+        cards = []
+        for c in new_cards:
+            back_text = c.get("back", "")
+            if c.get("example"):
+                back_text += f"\n\n🎮 Example: {c['example']}"
+            if c.get("mnemonic"):
+                back_text += f"\n\n🧠 Remember: {c['mnemonic']}"
+            cards.append({"front": c.get("front", ""), "back": back_text})
+        return {"cards": cards, "topic": req.topic}
+
+    # ── Static fallback ──
+    return {"cards": [
+        {"front": f"What is {req.topic}?", "back": f"{req.topic} is a core concept in AI. It enables machines to perform tasks that normally require human-level intelligence. Understanding it unlocks the door to building smart applications.\n\n🎮 Example: Game NPCs use similar concepts to decide their behavior.\n\n🧠 Remember: Think of it as 'teaching machines to think'."},
+        {"front": f"Why does {req.topic} matter?", "back": "It's one of the foundational building blocks of modern AI systems. Without it, many AI-powered features we use daily wouldn't exist. Mastering this concept opens pathways to advanced AI topics.\n\n🎮 Example: Every game recommendation algorithm relies on concepts like this."},
+        {"front": "What is Machine Learning?", "back": "ML is a branch of AI where systems automatically learn patterns from data without being explicitly programmed. The more data it sees, the smarter it gets — like a student who improves through practice.\n\n🧠 Remember: ML = learning from examples, not from rules."},
+        {"front": "What is a Neural Network?", "back": "A neural network is a system of interconnected nodes inspired by the human brain. Data flows through layers of nodes, each applying transformations until an answer emerges. Deep learning uses many of these layers.\n\n🎮 Example: The AI that generates Minecraft terrain uses neural network concepts."},
+        {"front": "What is Reinforcement Learning?", "back": "RL is how AI learns through trial, error, and rewards. The agent takes actions, observes results, and adjusts its strategy to maximize rewards over time. It's how AI learned to beat humans at chess and Go.\n\n🎮 Example: Game AI that learns to beat players uses RL to improve each match."},
+    ], "topic": req.topic}
 
 @app.post("/api/flashcards/progress")
 def update_flashcard_progress(req: FlashcardProgressRequest, db: Session = Depends(get_db)):

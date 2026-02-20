@@ -17,6 +17,7 @@ export default function QuizArena() {
   const [answers, setAnswers] = useState([]);
   const [selected, setSelected] = useState(null);
   const [quizResult, setQuizResult] = useState(null);
+  const [poolSize, setPoolSize] = useState(null);
   const [streak, setStreak] = useState(0);
   const [showConfetti, setShowConfetti] = useState(false);
 
@@ -32,6 +33,7 @@ export default function QuizArena() {
     setAnswers([]);
     setSelected(null);
     setQuizResult(null);
+    setPoolSize(null);
     setStreak(0);
     try {
       const data = await api.generateQuiz(tid, user.id);
@@ -42,6 +44,7 @@ export default function QuizArena() {
         return;
       }
       setQuestions(qs);
+      setPoolSize(data.pool_size || null);
       setPhase('quiz');
     } catch (e) {
       toast.error('Failed to generate quiz. Try again!');
@@ -84,6 +87,7 @@ export default function QuizArena() {
         student_id: user.id, topic_id: selectedTopic, answers: finalAnswers
       });
       setQuizResult(res);
+      if (res.pool_size) setPoolSize(res.pool_size);
       setPhase('result');
       if (res.perfect) {
         setShowConfetti(true);
@@ -136,26 +140,35 @@ export default function QuizArena() {
 
   // ── RESULT PHASE ──
   if (phase === 'result' && quizResult) {
+    const score = Math.round(quizResult.score);
+    const emoji = quizResult.perfect ? '🏆' : score >= 80 ? '🌟' : score >= 60 ? '💪' : '📚';
+    const msg = quizResult.perfect ? 'PERFECT SCORE!' : score >= 80 ? 'Excellent Work!' : score >= 60 ? 'Good Job!' : 'Keep Practicing!';
     return (
       <div className="max-w-2xl mx-auto animate-fade-in">
         {showConfetti && <ReactConfetti recycle={false} numberOfPieces={300} />}
         <div className={`rounded-2xl p-8 text-center bg-gradient-to-r ${theme.gradient} mb-6`}>
-          <span className="text-6xl block mb-4">{quizResult.perfect ? '🏆' : quizResult.score >= 60 ? '🌟' : '💪'}</span>
-          <h2 className="text-3xl font-black text-white">{quizResult.perfect ? 'PERFECT!' : quizResult.score >= 60 ? 'Great Job!' : 'Keep Trying!'}</h2>
-          <p className="text-white/80 text-lg mt-2">{quizResult.correct}/{quizResult.total} correct · {Math.round(quizResult.score)}%</p>
+          <span className="text-6xl block mb-4">{emoji}</span>
+          <h2 className="text-3xl font-black text-white">{msg}</h2>
+          <p className="text-white/80 text-lg mt-2">{quizResult.correct}/{quizResult.total} correct · {score}%</p>
           <p className="text-white font-bold mt-1">+{quizResult.xp_earned} XP earned!</p>
+          {poolSize && (
+            <p className="text-white/60 text-xs mt-2">Questions drawn from a pool of {poolSize}+ · Retry for fresh questions!</p>
+          )}
         </div>
 
         <div className="space-y-3 mb-6">
           {answers.map((a, i) => (
             <div key={i} className={`${theme.card} rounded-xl p-4`}>
-              <p className="font-semibold text-white text-sm mb-2">Q{i+1}: {a.question}</p>
+              <div className="flex items-start gap-2 mb-2">
+                <span className="text-sm font-bold text-gray-500 shrink-0">Q{i+1}</span>
+                <p className="font-semibold text-white text-sm">{a.question}</p>
+              </div>
               <div className="flex items-center gap-2 mb-1">
                 <span>{a.is_correct ? '✅' : '❌'}</span>
-                <span className="text-sm text-gray-300">Your answer: {a.selected}</span>
+                <span className={`text-sm ${a.is_correct ? 'text-green-400' : 'text-red-400'}`}>Your answer: {a.selected}</span>
               </div>
-              {!a.is_correct && <p className="text-sm text-green-400">Correct: {a.correct}</p>}
-              {a.explanation && <p className="text-xs text-gray-400 mt-1">💡 {a.explanation}</p>}
+              {!a.is_correct && <p className="text-sm text-green-400 mb-1">✓ Correct: {a.correct}</p>}
+              {a.explanation && <p className="text-xs text-gray-400 mt-1 leading-relaxed">💡 {a.explanation}</p>}
             </div>
           ))}
         </div>
@@ -163,7 +176,7 @@ export default function QuizArena() {
         <div className="flex gap-3">
           <button onClick={() => startQuiz(selectedTopic)}
             className={`flex-1 py-3 rounded-xl font-bold bg-gradient-to-r ${theme.gradient} text-white hover:opacity-90`}>
-            🔄 Retry
+            🔄 New Questions
           </button>
           <button onClick={() => setPhase('select')}
             className="flex-1 py-3 rounded-xl font-bold bg-gray-800 text-white hover:bg-gray-700">
