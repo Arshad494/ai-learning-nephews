@@ -15,11 +15,30 @@ import random
 from database import get_db, engine, Base
 from models import *
 
-# Try to import Gemini
+# Load env vars
 try:
-    import google.generativeai as genai
     from dotenv import load_dotenv
     load_dotenv()
+except Exception:
+    pass
+
+# Try to import Groq (primary AI — for chat/tutor)
+try:
+    from groq import Groq as GroqClient
+    groq_api_key = os.getenv("GROQ_API_KEY", "")
+    if groq_api_key:
+        groq_client = GroqClient(api_key=groq_api_key)
+        GROQ_AVAILABLE = True
+    else:
+        GROQ_AVAILABLE = False
+        groq_client = None
+except Exception:
+    GROQ_AVAILABLE = False
+    groq_client = None
+
+# Try to import Gemini (fallback + quiz/content generation)
+try:
+    import google.generativeai as genai
     api_key = os.getenv("GEMINI_API_KEY", "")
     if api_key:
         genai.configure(api_key=api_key)
@@ -697,8 +716,8 @@ def chat_with_tutor(req: ChatRequest, db: Session = Depends(get_db)):
     db.add(ChatMessage(student_id=student.id, role="user", content=req.message))
     db.commit()
 
-    if not GEMINI_AVAILABLE:
-        fallback_msg = f"Hey {student.name}! 🤖 I'm your AI tutor but I'm not connected to my brain (Gemini API) right now. Please ask your uncle to add the GEMINI_API_KEY to make me super smart! For now, keep exploring the topics and quizzes!"
+    if not GROQ_AVAILABLE and not GEMINI_AVAILABLE:
+        fallback_msg = f"Hey {student.name}! 🤖 I'm your AI tutor but I'm not connected to my brain right now. Please ask your uncle to add the GROQ_API_KEY to make me super smart! For now, keep exploring the topics and quizzes!"
         db.add(ChatMessage(student_id=student.id, role="assistant", content=fallback_msg))
         db.commit()
         return {"response": fallback_msg}
@@ -710,18 +729,32 @@ def chat_with_tutor(req: ChatRequest, db: Session = Depends(get_db)):
         ).order_by(desc(ChatMessage.id)).limit(20).all()
         recent_messages.reverse()
 
-        chat_history = []
-        for msg in recent_messages[:-1]:
-            role = "user" if msg.role == "user" else "model"
-            chat_history.append({"role": role, "parts": [msg.content]})
-
         topic_context = f"\n\nCurrent topic context: {req.topic}" if req.topic else ""
 
-        chat = gemini_model.start_chat(history=chat_history)
-        full_prompt = f"{system_prompt}{topic_context}\n\nStudent says: {req.message}"
+        if GROQ_AVAILABLE:
+            # Build messages in OpenAI format for Groq
+            messages = [{"role": "system", "content": system_prompt + topic_context}]
+            for msg in recent_messages[:-1]:
+                messages.append({"role": msg.role if msg.role == "user" else "assistant", "content": msg.content})
+            messages.append({"role": "user", "content": req.message})
 
-        response = chat.send_message(full_prompt)
-        reply = response.text
+            completion = groq_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=messages,
+                max_tokens=1024,
+                temperature=0.7,
+            )
+            reply = completion.choices[0].message.content
+        else:
+            # Fallback to Gemini
+            chat_history = []
+            for msg in recent_messages[:-1]:
+                role = "user" if msg.role == "user" else "model"
+                chat_history.append({"role": role, "parts": [msg.content]})
+            chat = gemini_model.start_chat(history=chat_history)
+            full_prompt = f"{system_prompt}{topic_context}\n\nStudent says: {req.message}"
+            response = chat.send_message(full_prompt)
+            reply = response.text
 
         db.add(ChatMessage(student_id=student.id, role="assistant", content=reply))
         db.commit()
