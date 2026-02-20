@@ -22,21 +22,44 @@ try:
 except Exception:
     pass
 
-# Try to import Groq (primary AI — for chat/tutor)
+import urllib.request
+import urllib.error
+
+# ── Groq — uses stdlib urllib, NO groq package needed ──
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_AVAILABLE = bool(GROQ_API_KEY)
+
+def groq_chat(messages: list, max_tokens: int = 1024, temperature: float = 0.7) -> str:
+    """Call Groq chat completions using stdlib only — zero external deps."""
+    payload = json.dumps({
+        "model": "llama-3.3-70b-versatile",
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        "https://api.groq.com/openai/v1/chat/completions",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    return data["choices"][0]["message"]["content"]
+
+# ── Groq SDK — optional, used if available for convenience ──
+groq_client = None
 try:
     from groq import Groq as GroqClient
-    groq_api_key = os.getenv("GROQ_API_KEY", "")
-    if groq_api_key:
-        groq_client = GroqClient(api_key=groq_api_key)
-        GROQ_AVAILABLE = True
-    else:
-        GROQ_AVAILABLE = False
-        groq_client = None
+    if GROQ_API_KEY:
+        groq_client = GroqClient(api_key=GROQ_API_KEY)
 except Exception:
-    GROQ_AVAILABLE = False
-    groq_client = None
+    pass  # Falls back to groq_chat() using urllib
 
-# Try to import Gemini (fallback + quiz/content generation)
+# ── Gemini — for quiz/content generation as secondary ──
 try:
     import google.generativeai as genai
     api_key = os.getenv("GEMINI_API_KEY", "")
@@ -571,13 +594,10 @@ Return ONLY the raw content text. Start directly with the first ## header. No pr
             if GROQ_AVAILABLE:
                 for level, attr in [("simple", "simple_content"), ("normal", "normal_content"), ("technical", "tech_content")]:
                     try:
-                        completion = groq_client.chat.completions.create(
-                            model="llama-3.3-70b-versatile",
-                            messages=[{"role": "user", "content": build_content_prompt(level)}],
-                            max_tokens=3000,
-                            temperature=0.75,
+                        locals()[attr] = groq_chat(
+                            [{"role": "user", "content": build_content_prompt(level)}],
+                            max_tokens=3000, temperature=0.75,
                         )
-                        locals()[attr] = completion.choices[0].message.content.strip()
                     except Exception:
                         pass
             elif GEMINI_AVAILABLE:
@@ -704,7 +724,7 @@ def generate_quiz(topic_id: int, student_id: int = Query(...), db: Session = Dep
 
     all_new_questions = []
 
-    # ── Primary: Groq (generate 50 questions in 2 batches) ──
+    # ── Primary: Groq via stdlib urllib (no groq package needed) ──
     if GROQ_AVAILABLE:
         try:
             batches = [
@@ -713,21 +733,15 @@ def generate_quiz(topic_id: int, student_id: int = Query(...), db: Session = Dep
             ]
             for count, easy, medium, hard in batches:
                 prompt = _build_quiz_prompt(topic.title, ctx, count, easy, medium, hard)
-                completion = groq_client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=4500,
-                    temperature=0.7,
-                )
-                text = completion.choices[0].message.content.strip()
+                text = groq_chat([{"role": "user", "content": prompt}], max_tokens=4500)
+                text = text.strip()
                 if "```" in text:
                     parts = text.split("```")
                     text = parts[1] if len(parts) > 1 else text
                     if text.startswith("json"):
                         text = text[4:]
                     text = text.rsplit("```", 1)[0]
-                text = text.strip()
-                batch = json.loads(text)
+                batch = json.loads(text.strip())
                 all_new_questions.extend(batch)
         except Exception:
             all_new_questions = []
@@ -862,8 +876,12 @@ def chat_with_tutor(req: ChatRequest, db: Session = Depends(get_db)):
     db.add(ChatMessage(student_id=student.id, role="user", content=req.message))
     db.commit()
 
-    if not GROQ_AVAILABLE and not GEMINI_AVAILABLE:
-        fallback_msg = f"Hey {student.name}! 🤖 I'm your AI tutor but I'm not connected to my brain right now. Please ask your uncle to add the GROQ_API_KEY to make me super smart! For now, keep exploring the topics and quizzes!"
+    if not GROQ_AVAILABLE:
+        fallback_msg = (
+            f"Hey {student.name}! 🤖 The AI tutor isn't connected yet — "
+            "GROQ_API_KEY is missing from Railway environment variables. "
+            "Ask your uncle to add it in Railway → Variables!"
+        )
         db.add(ChatMessage(student_id=student.id, role="assistant", content=fallback_msg))
         db.commit()
         return {"response": fallback_msg}
@@ -877,39 +895,25 @@ def chat_with_tutor(req: ChatRequest, db: Session = Depends(get_db)):
 
         topic_context = f"\n\nCurrent topic context: {req.topic}" if req.topic else ""
 
-        if GROQ_AVAILABLE:
-            # Build messages in OpenAI format for Groq
-            messages = [{"role": "system", "content": system_prompt + topic_context}]
-            for msg in recent_messages[:-1]:
-                messages.append({"role": msg.role if msg.role == "user" else "assistant", "content": msg.content})
-            messages.append({"role": "user", "content": req.message})
+        # Build OpenAI-format messages for Groq
+        messages = [{"role": "system", "content": system_prompt + topic_context}]
+        for msg in recent_messages[:-1]:  # exclude the message we just added
+            messages.append({
+                "role": "user" if msg.role == "user" else "assistant",
+                "content": msg.content,
+            })
+        messages.append({"role": "user", "content": req.message})
 
-            completion = groq_client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=messages,
-                max_tokens=1024,
-                temperature=0.7,
-            )
-            reply = completion.choices[0].message.content
-        else:
-            # Fallback to Gemini
-            chat_history = []
-            for msg in recent_messages[:-1]:
-                role = "user" if msg.role == "user" else "model"
-                chat_history.append({"role": role, "parts": [msg.content]})
-            chat = gemini_model.start_chat(history=chat_history)
-            full_prompt = f"{system_prompt}{topic_context}\n\nStudent says: {req.message}"
-            response = chat.send_message(full_prompt)
-            reply = response.text
+        # Call Groq via stdlib urllib (no groq package required)
+        reply = groq_chat(messages, max_tokens=1024)
 
         db.add(ChatMessage(student_id=student.id, role="assistant", content=reply))
         db.commit()
-
-        add_xp(db, student.id, 0, "")  # Trigger badge checks
-
+        add_xp(db, student.id, 0, "")  # trigger badge checks
         return {"response": reply}
+
     except Exception as e:
-        error_msg = "Taking a quick breather 😴 — back in a moment! (AI rate limit reached, try again in a few seconds)"
+        error_msg = "Taking a quick breather 😴 — try again in a moment! (Groq API hiccup)"
         db.add(ChatMessage(student_id=student.id, role="assistant", content=error_msg))
         db.commit()
         return {"response": error_msg}
@@ -972,13 +976,7 @@ Cover the topic from multiple angles: definitions, mechanisms, applications, com
 
 Return ONLY valid JSON array. Each object:
 {{"front":"concise question or term (max 15 words)","back":"rich explanation (3-4 sentences that really teach)","example":"specific real-world or gaming example (2 sentences)","mnemonic":"memory trick, acronym, or vivid analogy (1-2 sentences, can be empty string if not helpful)"}}"""
-            completion = groq_client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=5000,
-                temperature=0.7,
-            )
-            text = completion.choices[0].message.content.strip()
+            text = groq_chat([{"role": "user", "content": prompt}], max_tokens=5000)
             if "```" in text:
                 parts = text.split("```")
                 text = parts[1] if len(parts) > 1 else text
