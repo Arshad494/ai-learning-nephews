@@ -23,6 +23,6 @@ COPY --from=frontend-builder /app/frontend/dist ./backend/static
 # Expose port
 EXPOSE 8000
 
-# Start app
+# Start app using shell form so cd works
 WORKDIR /app/backend
-CMD python seed_data.py && uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
+CMD ["sh", "-c", "python seed_data.py && uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
