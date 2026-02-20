@@ -3,11 +3,17 @@ import { Link } from 'react-router-dom';
 import { useAuth, getTheme } from '../App';
 import api from '../api';
 
-const pathLabels = { gaming: '🎮 AI in Gaming', business: '💼 AI for Business', developer: '💻 AI Developer' };
+const pathLabels = {
+  gaming: '🎮 AI in Gaming',
+  business: '💼 AI for Business',
+  developer: '💻 AI Developer',
+  ai_enthusiast: '🤖 AI Enthusiast',
+};
 const pathGreetings = {
   gaming: (name) => `Yo ${name}! Ready to level up? 🎮`,
   business: (name) => `Welcome back, ${name}! Let's build empires 💼`,
   developer: (name) => `Hey ${name}! Let's build something cool 💻`,
+  ai_enthusiast: (name) => `Welcome, ${name}! The AI revolution starts here 🤖`,
 };
 
 export default function Dashboard() {

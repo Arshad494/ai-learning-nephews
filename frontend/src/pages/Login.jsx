@@ -22,6 +22,19 @@ export default function Login() {
   const navigate = useNavigate();
   const pendingLogin = useRef(false);
 
+  const handleGuestAccess = useCallback(() => {
+    const guestUser = {
+      id: 0, name: 'Arshad', age: 25, role: 'student',
+      path_id: 'ai_enthusiast', avatar: '🤖',
+      total_xp: 0, level: 'Explorer',
+      current_streak: 0, longest_streak: 0, streak_freezes: 0,
+      isGuest: true,
+    };
+    login(guestUser);
+    toast.success('Welcome, AI Explorer! Explore freely 🤖');
+    navigate('/dashboard');
+  }, [login, navigate]);
+
   const doLogin = useCallback(async (name, pinCode) => {
     if (pendingLogin.current) return;
     pendingLogin.current = true;
@@ -113,6 +126,17 @@ export default function Login() {
             <h2 className="text-2xl font-bold text-white">{selected.name}</h2>
             <p className={`text-sm bg-gradient-to-r ${selected.color} bg-clip-text text-transparent font-semibold`}>{selected.desc}</p>
           </div>
+
+          {/* Guest access for AI Enthusiast */}
+          {selected.name === 'Arshad' && (
+            <div className="mb-4">
+              <button onClick={handleGuestAccess}
+                className="w-full py-4 rounded-xl font-bold text-lg bg-gradient-to-r from-pink-500 to-purple-600 text-white hover:opacity-90 transition-all active:scale-95 mb-3">
+                🚀 Explore as Guest — No PIN Needed
+              </button>
+              <p className="text-center text-gray-500 text-xs mb-3">— or sign in with PIN —</p>
+            </div>
+          )}
 
           <div className="bg-gray-900/80 backdrop-blur rounded-2xl p-6 border border-gray-800">
             <p className="text-center text-gray-400 mb-4">Enter your PIN</p>

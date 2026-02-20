@@ -25,6 +25,7 @@ const activeStyles = {
   gaming: 'bg-green-500/15 text-green-400 font-semibold',
   business: 'bg-amber-500/15 text-amber-400 font-semibold',
   developer: 'bg-cyan-500/15 text-cyan-400 font-semibold',
+  ai_enthusiast: 'bg-pink-500/15 text-pink-400 font-semibold',
   admin: 'bg-rose-500/15 text-rose-400 font-semibold',
 };
 
