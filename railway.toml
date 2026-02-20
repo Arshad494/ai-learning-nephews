@@ -3,6 +3,6 @@ buildCommand = "echo 'Using Dockerfile'"
 
 [deploy]
 startCommand = "python seed_data.py && uvicorn main:app --host 0.0.0.0 --port $PORT"
-healthcheckPath = "/"
+healthcheckPath = "/api/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
