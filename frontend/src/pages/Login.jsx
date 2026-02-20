@@ -9,6 +9,7 @@ const students = [
   { name: 'Adham', avatar: '💼', age: 17, color: 'from-amber-500 to-blue-600', desc: 'AI for Business', border: 'border-amber-500/50', glow: 'hover:shadow-amber-500/20' },
   { name: 'Irfan', avatar: '📊', age: 17, color: 'from-amber-500 to-orange-500', desc: 'AI for Business', border: 'border-orange-500/50', glow: 'hover:shadow-orange-500/20' },
   { name: 'Adnan', avatar: '💻', age: 20, color: 'from-cyan-500 to-purple-500', desc: 'AI Developer', border: 'border-cyan-500/50', glow: 'hover:shadow-cyan-500/20' },
+  { name: 'Arshad', avatar: '🤖', age: 0, color: 'from-pink-500 to-purple-600', desc: 'AI Enthusiast', border: 'border-pink-500/50', glow: 'hover:shadow-pink-500/20' },
   { name: 'Uncle', avatar: '👨‍💼', age: 0, color: 'from-rose-500 to-indigo-500', desc: 'Admin Dashboard', border: 'border-rose-500/50', glow: 'hover:shadow-rose-500/20' },
 ];
 
@@ -32,7 +33,11 @@ export default function Login() {
       toast.success(`Welcome back, ${user.name}! 🎉`);
       navigate(user.role === 'admin' ? '/admin' : '/dashboard');
     } catch (e) {
-      setError('Wrong PIN! Try again 🔒');
+      if (e.message && e.message.toLowerCase().includes('invalid')) {
+        setError('Wrong PIN! Try again 🔒');
+      } else {
+        setError('Server offline — try again in a moment 🔌');
+      }
       setPin('');
     } finally {
       setLoading(false);
@@ -89,7 +94,7 @@ export default function Login() {
       {!selected ? (
         <div className="animate-slide-up">
           <p className="text-center text-gray-300 mb-6 text-lg">Who's learning today?</p>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 max-w-4xl mx-auto">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 max-w-5xl mx-auto">
             {students.map((s) => (
               <button key={s.name} onClick={() => { setSelected(s); setPin(''); setError(''); }}
                 className={`group flex flex-col items-center p-6 rounded-2xl bg-gray-900/80 border-2 ${s.border} ${s.glow} hover:scale-105 transition-all duration-300 hover:shadow-lg backdrop-blur`}>

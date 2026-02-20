@@ -28,6 +28,7 @@ export function getTheme(pathId) {
     gaming: { primary: '#00ff88', secondary: '#a855f7', bg: '#0a0e17', card: 'card-gaming', accent: 'text-green-400', accentBg: 'bg-green-500', border: 'border-green-500/30', neon: 'neon-text-green', gradient: 'from-green-500 to-purple-500' },
     business: { primary: '#f59e0b', secondary: '#1e3a5f', bg: '#0f172a', card: 'card-business', accent: 'text-amber-400', accentBg: 'bg-amber-500', border: 'border-amber-500/30', neon: 'neon-text-gold', gradient: 'from-amber-500 to-blue-600' },
     developer: { primary: '#06b6d4', secondary: '#8b5cf6', bg: '#0c0a09', card: 'card-developer', accent: 'text-cyan-400', accentBg: 'bg-cyan-500', border: 'border-cyan-500/30', neon: 'neon-text-cyan', gradient: 'from-cyan-500 to-purple-500' },
+    ai_enthusiast: { primary: '#ec4899', secondary: '#8b5cf6', bg: '#0f0a1e', card: 'card-developer', accent: 'text-pink-400', accentBg: 'bg-pink-500', border: 'border-pink-500/30', neon: 'neon-text-cyan', gradient: 'from-pink-500 to-purple-600' },
     admin: { primary: '#f43f5e', secondary: '#6366f1', bg: '#0f172a', card: 'card-business', accent: 'text-rose-400', accentBg: 'bg-rose-500', border: 'border-rose-500/30', neon: '', gradient: 'from-rose-500 to-indigo-500' },
   };
   return themes[pathId] || themes.gaming;
