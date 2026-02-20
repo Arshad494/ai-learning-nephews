@@ -9,7 +9,7 @@ const students = [
   { name: 'Adham', avatar: '💼', age: 17, color: 'from-amber-500 to-blue-600', desc: 'AI for Business', border: 'border-amber-500/50', glow: 'hover:shadow-amber-500/20' },
   { name: 'Irfan', avatar: '📊', age: 17, color: 'from-amber-500 to-orange-500', desc: 'AI for Business', border: 'border-orange-500/50', glow: 'hover:shadow-orange-500/20' },
   { name: 'Adnan', avatar: '💻', age: 20, color: 'from-cyan-500 to-purple-500', desc: 'AI Developer', border: 'border-cyan-500/50', glow: 'hover:shadow-cyan-500/20' },
-  { name: 'Arshad', avatar: '🤖', age: 0, color: 'from-pink-500 to-purple-600', desc: 'AI Enthusiast', border: 'border-pink-500/50', glow: 'hover:shadow-pink-500/20' },
+  { name: 'AI Enthusiast', avatar: '🤖', age: 0, color: 'from-pink-500 to-purple-600', desc: 'Explore AI World', border: 'border-pink-500/50', glow: 'hover:shadow-pink-500/20' },
   { name: 'Uncle', avatar: '👨‍💼', age: 0, color: 'from-rose-500 to-indigo-500', desc: 'Admin Dashboard', border: 'border-rose-500/50', glow: 'hover:shadow-rose-500/20' },
 ];
 
@@ -24,7 +24,7 @@ export default function Login() {
 
   const handleGuestAccess = useCallback(() => {
     const guestUser = {
-      id: 0, name: 'Arshad', age: 25, role: 'student',
+      id: 0, name: 'AI Enthusiast', age: 0, role: 'student',
       path_id: 'ai_enthusiast', avatar: '🤖',
       total_xp: 0, level: 'Explorer',
       current_streak: 0, longest_streak: 0, streak_freezes: 0,
@@ -128,7 +128,7 @@ export default function Login() {
           </div>
 
           {/* Guest access for AI Enthusiast */}
-          {selected.name === 'Arshad' && (
+          {selected.name === 'AI Enthusiast' && (
             <div className="mb-4">
               <button onClick={handleGuestAccess}
                 className="w-full py-4 rounded-xl font-bold text-lg bg-gradient-to-r from-pink-500 to-purple-600 text-white hover:opacity-90 transition-all active:scale-95 mb-3">

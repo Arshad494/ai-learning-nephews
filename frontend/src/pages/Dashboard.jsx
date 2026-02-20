@@ -13,7 +13,7 @@ const pathGreetings = {
   gaming: (name) => `Yo ${name}! Ready to level up? 🎮`,
   business: (name) => `Welcome back, ${name}! Let's build empires 💼`,
   developer: (name) => `Hey ${name}! Let's build something cool 💻`,
-  ai_enthusiast: (name) => `Welcome, ${name}! The AI revolution starts here 🤖`,
+  ai_enthusiast: () => `Welcome, AI Explorer! The revolution starts here 🤖`,
 };
 
 export default function Dashboard() {
