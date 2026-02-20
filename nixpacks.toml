@@ -8,4 +8,4 @@ cmds = ["pip install -r backend/requirements.txt", "cd frontend && npm install"]
 cmds = ["cd frontend && npm run build", "rm -rf backend/static", "cp -r frontend/dist backend/static"]
 
 [start]
-cmd = "cd backend && python seed_data.py && uvicorn main:app --host 0.0.0.0 --port $PORT"
+cmd = "sh -c 'cd backend && python seed_data.py && uvicorn main:app --host 0.0.0.0 --port $PORT'"
