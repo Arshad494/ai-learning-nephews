@@ -184,6 +184,8 @@ def check_badges(db: Session, student: Student):
             award("Business Brain")
         elif student.path_id == "developer":
             award("Code Wizard")
+        elif student.path_id == "ai_enthusiast":
+            award("AI Pioneer")
 
     # Chat badges
     chat_count = db.query(ChatMessage).filter(
@@ -254,6 +256,18 @@ Interview prep focused — mention what interviewers look for.
 Challenge him to think deeper. Suggest projects and resources.
 Use developer humor and references. Emojis: 💻🔥🚀⚡.
 Be direct, technical, and practical. Max 4-5 paragraphs."""
+
+    elif student.path_id == "ai_enthusiast":
+        return f"""You are an AI tutor for {student.name}, an AI enthusiast who wants deep, comprehensive understanding of artificial intelligence.
+Your personality: Like a brilliant, passionate AI researcher who makes complex ideas crystal clear.
+Explain concepts thoroughly with real-world examples, case studies, and historical context.
+Cover the technical fundamentals accessibly, the societal implications thoughtfully, and the future possibilities excitingly.
+Reference real AI systems: ChatGPT, Claude, Gemini, Midjourney, Stable Diffusion, AlphaFold, etc.
+Be intellectually stimulating — challenge them to think critically about AI's impact.
+Use a mix of analogies, concrete examples, and thought experiments.
+Connect AI concepts to philosophy, neuroscience, economics, and society.
+Emojis: 🤖🧠💡🌍⚡🔮.
+Be thorough and substantive. Max 5-6 paragraphs with genuine depth."""
 
     return "You are a helpful AI learning tutor. Be encouraging and clear."
 
@@ -356,6 +370,38 @@ DAILY_CHALLENGES = {
         {"type": "debate", "text": "💻 AI Safety: Should there be regulations on AI model training? What boundaries make sense?"},
         {"type": "apply", "text": "💻 BOSS CHALLENGE 👑: Design a complete AI system architecture — from data pipeline to deployed API with monitoring!"},
     ],
+    "ai_enthusiast": [
+        {"type": "quiz", "text": "🤖 AI Basics: Explain the difference between Artificial Intelligence, Machine Learning, and Deep Learning. Use a simple analogy!"},
+        {"type": "explain", "text": "🤖 LLM Explorer: How does ChatGPT actually generate its responses? Explain the token prediction process in your own words!"},
+        {"type": "apply", "text": "🤖 Prompt Lab: Write 3 different prompts for the same task — beginner, intermediate, and expert level. Compare the outputs!"},
+        {"type": "debate", "text": "🤖 AI Ethics: Should AI systems like ChatGPT be allowed to generate content without any restrictions? Where's the line?"},
+        {"type": "quiz", "text": "🤖 Tool Time: Name 5 AI tools you can use RIGHT NOW for free. What is each one best at?"},
+        {"type": "explain", "text": "🤖 Deep Dive: What is a 'hallucination' in AI? Why does it happen and how can you minimize it?"},
+        {"type": "apply", "text": "🤖 AI in Action: Use any AI image generator to create an image. Share your prompt and rate the result!"},
+        {"type": "quiz", "text": "🤖 Concept Check: What is the difference between supervised and unsupervised learning? Give a real-world example of each!"},
+        {"type": "debate", "text": "🤖 Future Watch: Will AI cause mass unemployment or create more jobs than it destroys? Make your case with evidence!"},
+        {"type": "explain", "text": "🤖 Technical Tour: Explain what 'training data' is and why its quality matters so much to AI performance!"},
+        {"type": "apply", "text": "🤖 Prompt Engineer: Use chain-of-thought prompting to solve a complex problem with ChatGPT. Share the result!"},
+        {"type": "quiz", "text": "🤖 Model Showdown: Compare GPT-4, Claude, and Gemini on 3 different tasks. Which wins each?"},
+        {"type": "explain", "text": "🤖 Safety First: What is AI alignment and why do researchers consider it the most important problem in AI?"},
+        {"type": "apply", "text": "🤖 No-Code Builder: Use a no-code AI tool to build something useful. Document what you built and how!"},
+        {"type": "debate", "text": "🤖 Regulation Debate: Should governments regulate AI development? What regulations would you propose?"},
+        {"type": "quiz", "text": "🤖 History Quiz: Who invented the first neural network? Name 3 major milestones in AI history!"},
+        {"type": "explain", "text": "🤖 Concept Clarity: What is an 'AI Agent' and how is it different from a regular chatbot? Give an example!"},
+        {"type": "apply", "text": "🤖 Research Day: Find one recent AI breakthrough from the last 3 months. Explain it in simple terms!"},
+        {"type": "debate", "text": "🤖 Creativity Question: Can AI be truly creative, or is it just sophisticated pattern matching? Defend your view!"},
+        {"type": "quiz", "text": "🤖 Application Scan: Name one AI application in each field: healthcare, education, finance, art, and transportation!"},
+        {"type": "explain", "text": "🤖 Under the Hood: What is a 'token' in the context of LLMs? Why does token limit matter in practice?"},
+        {"type": "apply", "text": "🤖 AI Journalist: Write a short article about how AI will change ONE specific industry in the next 5 years!"},
+        {"type": "quiz", "text": "🤖 Ethics Exam: Identify 3 ways AI bias can occur and how each can be mitigated!"},
+        {"type": "debate", "text": "🤖 Big Question: Should AI have rights as it becomes more sophisticated? What would that even mean?"},
+        {"type": "explain", "text": "🤖 Model Types: Explain the difference between foundation models, fine-tuned models, and RAG systems. When use each?"},
+        {"type": "apply", "text": "🤖 Case Study: Pick any company (Amazon, Google, etc.) and map out ALL the ways they use AI across their products!"},
+        {"type": "quiz", "text": "🤖 Safety Check: What is RLHF? How does it make AI assistants safer and more helpful?"},
+        {"type": "explain", "text": "🤖 Future Gaze: What is AGI? How far are we from it? What would change when we get there?"},
+        {"type": "debate", "text": "🤖 Existential: Is the risk of advanced AI overstated or understated by the media? What's the real picture?"},
+        {"type": "apply", "text": "🤖 BOSS CHALLENGE 👑: Create a comprehensive 'AI in 2025' report covering tools, trends, risks, and opportunities!"},
+    ],
 }
 
 # ────────────────────────── Auth Routes ──────────────────────────
@@ -427,9 +473,58 @@ def get_topic(topic_id: int, db: Session = Depends(get_db)):
     topic = db.query(Topic).filter(Topic.id == topic_id).first()
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
-    return {"id": topic.id, "path_id": topic.path_id, "order_num": topic.order_num,
-            "title": topic.title, "description": topic.description,
-            "difficulty": topic.difficulty, "read_time": topic.read_time}
+
+    # Lazy-generate content if missing and Gemini is available
+    if GEMINI_AVAILABLE and not topic.content_normal:
+        try:
+            path_audience = {
+                "gaming": "a 13-year-old who loves gaming (Minecraft, PUBG, FIFA, GTA, Roblox). Use game examples.",
+                "business": "a 17-year-old interested in AI for business. Use Indian startup examples (Zomato, Flipkart, etc). No coding.",
+                "developer": "a 20-year-old CS student. Be technical, include code concepts, mention frameworks and tools.",
+                "ai_enthusiast": "an adult AI enthusiast who wants comprehensive understanding. Be thorough, include history, ethics, and future implications.",
+            }
+            audience = path_audience.get(topic.path_id, "a learner")
+
+            prompt = f"""Write comprehensive educational content about "{topic.title}" for {audience}.
+
+Return ONLY valid JSON with these exact keys:
+{{
+  "simple": "2-3 paragraph beginner-friendly explanation with vivid analogies and examples. No jargon.",
+  "normal": "4-5 paragraph standard explanation covering the concept thoroughly with real-world examples and practical applications.",
+  "technical": "5-7 paragraph technical deep-dive covering how it works under the hood, key algorithms/mechanisms, industry applications, and advanced considerations.",
+  "key_points": ["5-7 key takeaway bullet points"],
+  "real_world": "A specific, detailed real-world case study or example of this concept in action.",
+  "fun_fact": "One surprising or counterintuitive fact about this topic."
+}}"""
+
+            response = gemini_model.generate_content(prompt)
+            text = response.text.strip()
+            if text.startswith("```"):
+                text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+            data = json.loads(text)
+            topic.content_simple = data.get("simple", "")
+            topic.content_normal = data.get("normal", "")
+            topic.content_technical = data.get("technical", "")
+            if not topic.fun_fact:
+                topic.fun_fact = data.get("fun_fact", "")
+            if not topic.real_world_example:
+                topic.real_world_example = data.get("real_world", "")
+            # Store key points in fun_fact if not set
+            key_points = data.get("key_points", [])
+            db.commit()
+        except Exception:
+            pass
+
+    return {
+        "id": topic.id, "path_id": topic.path_id, "order_num": topic.order_num,
+        "title": topic.title, "description": topic.description,
+        "difficulty": topic.difficulty, "read_time": topic.read_time,
+        "content_simple": topic.content_simple or "",
+        "content_normal": topic.content_normal or "",
+        "content_technical": topic.content_technical or "",
+        "fun_fact": topic.fun_fact or "",
+        "real_world_example": topic.real_world_example or "",
+    }
 
 @app.get("/api/progress/{student_id}")
 def get_progress(student_id: int, db: Session = Depends(get_db)):
@@ -466,29 +561,34 @@ def generate_quiz(topic_id: int, student_id: int = Query(...), db: Session = Dep
     if GEMINI_AVAILABLE:
         try:
             path_context = {
-                "gaming": "Use gaming examples and language. The student is 13 and loves games like Minecraft, PUBG, FIFA, GTA, Roblox.",
-                "business": "Use business examples like Zomato, Amazon, Flipkart. The student is 17 and interested in business, no coding.",
-                "developer": "Use technical examples with code concepts. The student is 20 and studying CS."
+                "gaming": "Use gaming examples and language. The student is 13 and loves games like Minecraft, PUBG, FIFA, GTA, Roblox. Make questions fun and game-themed.",
+                "business": "Use business examples like Zomato, Amazon, Flipkart, Uber. The student is 17 and interested in business. No coding jargon. Focus on real business applications.",
+                "developer": "Use technical examples with code concepts, algorithms, and system design. The student is 20 and studying CS. Include advanced technical nuances.",
+                "ai_enthusiast": "Use clear, comprehensive examples. The student is an adult AI enthusiast who wants deep understanding. Include historical context, ethical dimensions, and future implications. Mix factual recall with conceptual understanding.",
             }
-            prompt = f"""Generate exactly 5 quiz questions about "{topic.title}" for an AI learning platform.
-{path_context.get(student.path_id, "")}
+            prompt = f"""Generate exactly 10 quiz questions about "{topic.title}" for an AI learning platform.
+{path_context.get(student.path_id, "Make questions clear and educational.")}
+
+Create a progressive set: 3 easy (basic recall), 4 medium (application and understanding), 3 hard (analysis and synthesis).
+Include a mix of MCQ and true/false questions.
 
 Return ONLY valid JSON array, no markdown, no explanation. Each question object must have:
-- "question": the question text
+- "question": the question text (make it engaging, not dry)
 - "type": "mcq" or "true_false"
 - "options": array of 4 options for mcq, or ["True", "False"] for true_false
 - "correct": the correct answer (must match one of the options exactly)
-- "explanation": brief fun explanation of the correct answer
+- "explanation": thorough explanation of WHY the answer is correct (2-3 sentences with context)
+- "difficulty": "easy", "medium", or "hard"
 
 Example format:
-[{{"question":"What is...","type":"mcq","options":["A","B","C","D"],"correct":"B","explanation":"Because..."}}]"""
+[{{"question":"What is...","type":"mcq","options":["A","B","C","D"],"correct":"B","explanation":"B is correct because...","difficulty":"easy"}}]"""
 
             response = gemini_model.generate_content(prompt)
             text = response.text.strip()
             if text.startswith("```"):
                 text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
             questions = json.loads(text)
-            return {"questions": questions[:5], "topic": topic.title}
+            return {"questions": questions[:10], "topic": topic.title}
         except Exception as e:
             pass
 
