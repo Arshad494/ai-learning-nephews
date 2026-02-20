@@ -18,7 +18,7 @@ def seed():
         Student(name="Adham", age=17, pin="1717", role="student", path_id="business", avatar="💼", total_xp=0, level="Explorer"),
         Student(name="Irfan", age=17, pin="1717", role="student", path_id="business", avatar="📊", total_xp=0, level="Explorer"),
         Student(name="Adnan", age=20, pin="2020", role="student", path_id="developer", avatar="💻", total_xp=0, level="Explorer"),
-        Student(name="AI Enthusiast", age=0, pin="1111", role="student", path_id="ai_enthusiast", avatar="🤖", total_xp=0, level="Explorer"),
+        Student(name="Family & Friends", age=0, pin="1111", role="student", path_id="ai_enthusiast", avatar="🤖", total_xp=0, level="Explorer"),
         Student(name="Uncle", age=0, pin="0000", role="admin", path_id="admin", avatar="👨‍💼", total_xp=0, level="Legend"),
     ]
     db.add_all(students)
